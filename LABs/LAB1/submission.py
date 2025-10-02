@@ -14,7 +14,14 @@ def load_and_preprocess_data(data_file: str = "data/train.csv"):
         features (np.ndarray): Input features, shape [num_samples, in_features]
         targets (np.ndarray): Target values, shape [num_samples]
     """
-    raise NotImplementedError("Not Implemented Yet.")
+
+    if "Run_time" in dataset.columns:
+        targets = dataset["Run_time"].values
+        features = dataset.drop(columns=["Run_time"])
+        
+    #Standardization
+    features = (features-features.mean(axis=0))/(features.std(axis=0) + 1e-8)
+    
     print(f"Data size: {features.shape[0]}. Features num: {features.shape[1]}")
     return features, targets
 
@@ -27,7 +34,12 @@ class LinearRegressionModel(LinearModel):
             in_features (int): Number of input features.
             out_features (int): Number of output features (usually 1).
         """
-        raise NotImplementedError("Not Implemented Yet.")
+        self.in_features = in_features
+        self.out_features = out_features
+
+        self.weight = np.random.randn(in_features,out_features) * 0.01
+
+        self.bias = np.zeros((1,out_features))
 
     def forward(self, features: np.ndarray) -> np.ndarray:
         """
@@ -36,7 +48,8 @@ class LinearRegressionModel(LinearModel):
         Args:
             features (np.ndarray): Input features, shape [batch_size, in_features].
         """
-        raise NotImplementedError("Not Implemented Yet.")
+        return np.dot(features, self.weight) + self.bias
+
 
     def gradient(self, features: np.ndarray, targets: np.ndarray, predictions: np.ndarray) -> tuple:
         """
@@ -50,7 +63,11 @@ class LinearRegressionModel(LinearModel):
         Returns:
             tuple: (dw, db), gradients for weights and bias.
         """
-        raise NotImplementedError("Not Implemented Yet.")
+        N = features.shape[0]
+        error = predictions-targets
+        dw = (2/N) * np.dot(features.T, error)
+        db = (2/N) * np.sum(error, axis=0, keepdims=True)
+
         return dw, db
 
     def backpropagation(self, features: np.ndarray, targets: np.ndarray, predictions: np.ndarray, learning_rate: float = 0.01) -> float:
@@ -63,7 +80,15 @@ class LinearRegressionModel(LinearModel):
             predictions (np.ndarray): True values, shape [batch_size, out_features].
             learning_rate (float): Learning rate, default 0.01.
         """
-        raise NotImplementedError("Not Implemented Yet.")
+        N = features.shape[0]
+        loss = np.mean((predictions-targets) ** 2)
+
+        dw, db = self.gradient(features,targets,predictions)
+
+        self.weight -= learning_rate*dw
+        self.bias -= learning_rate*db
+
+        return loss
 
 class LinearRegressionTrainer(Trainer):
     def __init__(self, model, train_dataloader, eval_dataloader=None, 
@@ -83,7 +108,13 @@ class LinearRegressionTrainer(Trainer):
         Returns:
             float: Mean loss for the batch.
         """
-        raise NotImplementedError("Not Implemented Yet.")
+        assert batch_pred.shape == batch_grd.shape,\
+            f"Shape mismatch: batch_pred {batch_pred.shape}, batch_grd {batch_grd.shape}"
+        
+        error = batch_pred - batch_grd
+        loss = np.mean(np.square(error))
+
+        return loss
 
 def linear_regression_analytic(X, y):
     """
@@ -91,13 +122,21 @@ def linear_regression_analytic(X, y):
 
     Args:
         X (np.ndarray): Input features, shape [num_samples, in_features]
-        y (np.ndarray): True values, shape [num_samples, out_features]
+        y (np.ndarray): True values, shape [num_samples, out_features] or [num_samples,]
 
     Return:
         weight (np.ndarray): Model weight
         bias (np.ndarray | float): Model bias
     """
-    raise NotImplementedError("Not Implemented Yet.")
+    N = X.shape[0]
+    X_aug = np.hstack((X, np.ones((N,1))))
+    y = np.atleast_2d(y).T if y.ndim == 1 else y  # 保证y为二维
+
+    theta = np.linalg.pinv(X_aug.T @ X_aug) @ X_aug.T @ y  # 用pinv更稳健
+
+    weight = theta[:-1]
+    bias = theta[-1:]
+
     return weight, bias
 
 class LogisticRegressionModel(LinearModel):
@@ -109,8 +148,14 @@ class LogisticRegressionModel(LinearModel):
             in_features (int): Number of input features.
             out_features (int): Number of output features (usually 1 for binary classification).
         """
-        raise NotImplementedError("Not Implemented Yet.")
+        self.in_features = in_features
+        self.out_features = out_features
 
+        self.weight = np.random.randn(in_features,out_features) * 0.01
+
+        self.bias = np.zeros((1,out_features))
+
+ 
     def _sigmoid(self, x: np.ndarray) -> np.ndarray:
         """
         Compute sigmoid function.
@@ -121,7 +166,7 @@ class LogisticRegressionModel(LinearModel):
         Returns:
             np.ndarray: Sigmoid output.
         """
-        raise NotImplementedError("Not Implemented Yet.")
+        return 1 / (1 + np.exp(-np.clip(x, -500, 500)))
 
     def forward(self, features: np.ndarray) -> np.ndarray:
         """
@@ -130,7 +175,8 @@ class LogisticRegressionModel(LinearModel):
         Args:
             features (np.ndarray): Input features, shape [batch_size, in_features].
         """
-        raise NotImplementedError("Not Implemented Yet.")
+        linear_output = np.dot(features, self.weight) + self.bias
+        return self._sigmoid(linear_output)
 
     def gradient(self, features: np.ndarray, targets: np.ndarray, predictions: np.ndarray) -> tuple:
         """
@@ -144,8 +190,12 @@ class LogisticRegressionModel(LinearModel):
         Returns:
             tuple: (dw, db), gradients for weights and bias.
         """
-        raise NotImplementedError("Not Implemented Yet.")
+        m = features.shape[0]
+        error = predictions - targets  # shape [m, out_features]
+        dw = np.dot (features.T, error) / m
+        db = np.sum(error, axis=0, keepdims=True) / m
         return dw, db
+
     
     def backpropagation(self, features: np.ndarray, targets: np.ndarray, predictions: np.ndarray, learning_rate: float = 0.01) -> float:
         """
@@ -159,7 +209,20 @@ class LogisticRegressionModel(LinearModel):
         Returns:
             float: Binary cross-entropy loss for the batch.
         """
-        raise NotImplementedError("Not Implemented Yet.")
+        # 1. 计算 loss
+        m = features.shape[0]
+        # 为防止 log(0)，加一个小 epsilon
+        epsilon = 1e-8
+        loss = - np.mean(targets * np.log(predictions + epsilon) + (1 - targets) * np.log(1 - predictions + epsilon))
+        
+        # 2. 计算梯度
+        dw, db = self.gradient(features, targets, predictions)
+        
+        # 3. 参数更新
+        self.weight -= learning_rate * dw
+        self.bias -= learning_rate * db
+        
+        return loss
 
 class LogisticRegressionTrainer(Trainer):
     def __init__(self, model, train_dataloader, eval_dataloader=None, 
@@ -169,4 +232,7 @@ class LogisticRegressionTrainer(Trainer):
                          learning_rate, eval_strategy, eval_steps, num_epochs, eval_metric)
         
     def compute_loss(self, batch_pred, batch_grd):
-        raise NotImplementedError("Not Implemented Yet.")
+        epsilon = 1e-8  # 防止 log(0)
+        loss = - np.mean(batch_grd * np.log(batch_pred + epsilon) + 
+                        (1 - batch_grd) * np.log(1 - batch_pred + epsilon))
+        return loss
