@@ -140,89 +140,69 @@ def linear_regression_analytic(X, y):
     return weight, bias
 
 class LogisticRegressionModel(LinearModel):
-    def __init__(self, in_features: int, out_features: int):
+    def __init__(self, in_features: int, out_features: int, lambda_reg: float = 0.01, regularization_type: str = "L2"):
         """
-        Logistic regression model, inherits from LinearModel.
+        Logistic regression model with regularization (L1 or L2).
 
         Args:
             in_features (int): Number of input features.
             out_features (int): Number of output features (usually 1 for binary classification).
+            lambda_reg (float): Regularization strength.
+            regularization_type (str): "L1" or "L2" for L1 or L2 regularization.
         """
         self.in_features = in_features
         self.out_features = out_features
+        self.lambda_reg = lambda_reg
+        self.regularization_type = regularization_type
 
-        self.weight = np.random.randn(in_features,out_features) * 0.01
+        # Initialize weights and bias
+        self.weight = np.random.randn(in_features, out_features) * 0.01
+        self.bias = np.zeros((1, out_features))
 
-        self.bias = np.zeros((1,out_features))
-
- 
     def _sigmoid(self, x: np.ndarray) -> np.ndarray:
-        """
-        Compute sigmoid function.
-
-        Args:
-            x (np.ndarray): Input values.
-
-        Returns:
-            np.ndarray: Sigmoid output.
-        """
         return 1 / (1 + np.exp(-np.clip(x, -500, 500)))
 
     def forward(self, features: np.ndarray) -> np.ndarray:
-        """
-        Predict the output given input.
-
-        Args:
-            features (np.ndarray): Input features, shape [batch_size, in_features].
-        """
         linear_output = np.dot(features, self.weight) + self.bias
         return self._sigmoid(linear_output)
 
     def gradient(self, features: np.ndarray, targets: np.ndarray, predictions: np.ndarray) -> tuple:
-        """
-        Compute gradients for binary cross-entropy loss.
-
-        Args:
-            features (np.ndarray): Input features, shape [batch_size, in_features].
-            targets (np.ndarray): True labels (0 or 1), shape [batch_size, out_features].
-            predictions (np.ndarray): Predicted probabilities, shape [batch_size, out_features].
-
-        Returns:
-            tuple: (dw, db), gradients for weights and bias.
-        """
         m = features.shape[0]
         error = predictions - targets  # shape [m, out_features]
-        dw = np.dot (features.T, error) / m
+        
+        # Compute the gradients without regularization
+        dw = np.dot(features.T, error) / m
         db = np.sum(error, axis=0, keepdims=True) / m
+        
+        # Add regularization term (L2 or L1)
+        if self.regularization_type == "L2":
+            dw += (self.lambda_reg / m) * self.weight  # L2 regularization
+        elif self.regularization_type == "L1":
+            dw += (self.lambda_reg / m) * np.sign(self.weight)  # L1 regularization
+        
         return dw, db
 
-    
     def backpropagation(self, features: np.ndarray, targets: np.ndarray, predictions: np.ndarray, learning_rate: float = 0.01) -> float:
-        """
-        Perform backpropagation, compute binary cross-entropy loss and update parameters.
-
-        Args:
-            features (np.ndarray): Input features, shape [batch_size, in_features].
-            targets (np.ndarray): True labels (0 or 1), shape [batch_size, out_features].
-            learning_rate (float): Learning rate, default 0.01.
-
-        Returns:
-            float: Binary cross-entropy loss for the batch.
-        """
-        # 1. 计算 loss
+        # Compute the loss (cross-entropy loss + regularization term)
         m = features.shape[0]
-        # 为防止 log(0)，加一个小 epsilon
         epsilon = 1e-8
-        loss = - np.mean(targets * np.log(predictions + epsilon) + (1 - targets) * np.log(1 - predictions + epsilon))
+        loss = -np.mean(targets * np.log(predictions + epsilon) + (1 - targets) * np.log(1 - predictions + epsilon))
         
-        # 2. 计算梯度
+        # Add regularization to the loss
+        if self.regularization_type == "L2":
+            loss += (self.lambda_reg / (2 * m)) * np.sum(np.square(self.weight))  # L2 regularization
+        elif self.regularization_type == "L1":
+            loss += (self.lambda_reg / m) * np.sum(np.abs(self.weight))  # L1 regularization
+        
+        # Compute the gradients
         dw, db = self.gradient(features, targets, predictions)
         
-        # 3. 参数更新
+        # Update the weights and bias
         self.weight -= learning_rate * dw
         self.bias -= learning_rate * db
         
         return loss
+
 
 class LogisticRegressionTrainer(Trainer):
     def __init__(self, model, train_dataloader, eval_dataloader=None, 
